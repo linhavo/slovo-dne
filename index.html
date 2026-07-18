@@ -99,12 +99,12 @@
     color: var(--muted);
     margin-top: .3em;
   }
-  .source {
-    margin-top: clamp(22px, 4dvh, 40px);
+  .credit {
     font-family: var(--font-display);
-    font-size: clamp(10px, 2.6vw, 12px);
-    letter-spacing: .22em;
+    font-size: 10px;
+    letter-spacing: .18em;
     text-transform: uppercase;
+    text-align: center;
     color: color-mix(in srgb, var(--ink) 40%, transparent);
   }
   .ui {
@@ -114,7 +114,11 @@
     display: flex;
     gap: 10px;
     z-index: 5;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .35s ease;
   }
+  .ui.shown { opacity: 1; pointer-events: auto; }
   .ui button {
     width: 42px; height: 42px;
     border-radius: 50%;
@@ -204,12 +208,18 @@
       <h1 class="word" id="word"></h1>
       <p class="gramline" id="gram"></p>
       <ol class="senses" id="senses"></ol>
-      <p class="source">wikislovn&iacute;k &mdash; cs.wiktionary.org</p>
     </div>
   </main>
   <div class="status" id="status">hled&aacute;m slovo&hellip;</div>
 
   <div class="sheet hidden" id="sheet">
+    <div>
+      <p class="row-label">V&yacute;b&#283;r slov</p>
+      <div class="seg" data-pref="pool">
+        <button data-val="cizi">Ciz&iacute; slova</button>
+        <button data-val="vse">V&scaron;echna slova</button>
+      </div>
+    </div>
     <div>
       <p class="row-label">P&iacute;smo</p>
       <div class="seg" data-pref="font">
@@ -233,6 +243,7 @@
         <button data-val="solid">Jedna barva</button>
       </div>
     </div>
+    <p class="credit">zdroj: wikislovn&iacute;k &middot; cs.wiktionary.org</p>
   </div>
 
   <div class="ui" id="ui">
@@ -249,7 +260,7 @@
   const $ = id => document.getElementById(id);
 
   /* ---------- preferences: font / mode / bg ---------- */
-  const DEFAULT_PREFS = { font: "serif", mode: "auto", bg: "gradient" };
+  const DEFAULT_PREFS = { font: "serif", mode: "auto", bg: "gradient", pool: "cizi" };
   const prefs = Object.assign({}, DEFAULT_PREFS,
     JSON.parse(localStorage.getItem("prefs") || "{}"));
   for (const k of Object.keys(DEFAULT_PREFS)) {
@@ -394,7 +405,7 @@
         const ex = cleanWikitext(line.replace(/^#\*\s*/, ""));
         if (ex) senses[senses.length - 1].example = ex;
       }
-      if (senses.length >= 3) break;
+      if (senses.length >= 2) break;
     }
     if (!senses.length) return null;
     return { title, pos, gender, senses, hasFlavor };
@@ -434,6 +445,59 @@
     throw new Error("nenalezeno");
   }
 
+  /* ---------- ciz\u00ed slova: loanword pool from Wikislovn\u00edk appendices ---------- */
+  const ORIGINS = ["z latiny", "z \u0159e\u010dtiny", "z francouz\u0161tiny",
+    "z ital\u0161tiny", "z n\u011bm\u010diny", "z angli\u010dtiny", "ze \u0161pan\u011bl\u0161tiny",
+    "z ru\u0161tiny", "z japon\u0161tiny", "z ture\u010dtiny", "z arab\u0161tiny", "z per\u0161tiny"];
+
+  async function getLoanPool() {
+    const cached = JSON.parse(localStorage.getItem("ciziPool:v1") || "null");
+    if (cached && Date.now() - cached.t < 7 * 864e5 && cached.pool.length > 30) return cached.pool;
+    const titles = ORIGINS.map(o => "P\u0159\u00edloha:Slova p\u0159ejat\u00e1 " + o + " (\u010de\u0161tina)");
+    const d = await api("action=query&prop=revisions&rvprop=content&rvslots=main&titles=" +
+      encodeURIComponent(titles.join("|")));
+    const pool = [];
+    const seen = new Set();
+    for (const p of d.query?.pages ?? []) {
+      const wt = p.revisions?.[0]?.slots?.main?.content;
+      if (!wt) continue;
+      const origin = ORIGINS.find(o => p.title.includes(o)) || "";
+      for (const m of wt.matchAll(/\[\[([^\]|#:]+)(?:\|[^\]]*)?\]\]/g)) {
+        const w = m[1].trim();
+        if (okTitle(w) && !seen.has(w)) { seen.add(w); pool.push({ w, origin }); }
+      }
+    }
+    if (pool.length > 30) localStorage.setItem("ciziPool:v1", JSON.stringify({ t: Date.now(), pool }));
+    return pool;
+  }
+
+  async function fetchLoanWord() {
+    const pool = await getLoanPool();
+    if (!pool || pool.length < 30) return fetchRandomWord(); // graceful fallback
+    for (let round = 0; round < 4; round++) {
+      const batch = [];
+      const used = new Set();
+      while (batch.length < 12 && used.size < pool.length) {
+        const i = Math.floor(Math.random() * pool.length);
+        if (used.has(i)) continue;
+        used.add(i);
+        batch.push(pool[i]);
+      }
+      const d = await api("action=query&prop=revisions&rvprop=content&rvslots=main&titles=" +
+        encodeURIComponent(batch.map(b => b.w).join("|")));
+      const entries = (d.query?.pages ?? [])
+        .map(p => {
+          const wt = p.revisions?.[0]?.slots?.main?.content;
+          const e = wt ? parseEntry(p.title, wt) : null;
+          if (e) e.origin = batch.find(b => b.w.toLowerCase() === p.title.toLowerCase())?.origin || "";
+          return e;
+        })
+        .filter(Boolean);
+      if (entries.length) return entries[Math.floor(Math.random() * entries.length)];
+    }
+    return fetchRandomWord();
+  }
+
   /* ---------- rendering ---------- */
   function render(entry) {
     currentWord = entry.title;
@@ -442,8 +506,16 @@
     $("word").textContent = entry.title;
     $("ghost").textContent = entry.title[0];
     const gram = [entry.pos, entry.gender].filter(Boolean).join(", ");
-    $("gram").textContent = gram || "";
-    $("gram").classList.toggle("hidden", !gram);
+    const gp = $("gram");
+    gp.textContent = gram;
+    if (entry.origin) {
+      if (gram) gp.appendChild(document.createTextNode(" \u00b7 "));
+      const o = document.createElement("span");
+      o.style.color = "var(--accent)";
+      o.textContent = entry.origin;
+      gp.appendChild(o);
+    }
+    gp.classList.toggle("hidden", !gram && !entry.origin);
     const ol = $("senses");
     ol.innerHTML = "";
     entry.senses.forEach((s, i) => {
@@ -458,7 +530,7 @@
       }
       body.appendChild(document.createTextNode(s.text));
       li.append(n, body);
-      if (s.example) {
+      if (s.example && i === 0) {
         const ex = document.createElement("span");
         ex.className = "example"; ex.textContent = "\u201e" + s.example + "\u201c";
         li.appendChild(ex);
@@ -495,7 +567,7 @@
       } else if (!fresh && localStorage.getItem(CACHE)) {
         entry = JSON.parse(localStorage.getItem(CACHE));
       } else {
-        entry = await fetchRandomWord();
+        entry = prefs.pool === "vse" ? await fetchRandomWord() : await fetchLoanWord();
         localStorage.setItem(CACHE, JSON.stringify(entry));
         Object.keys(localStorage).forEach(k => {
           if ((k.startsWith("slovoDne:") || k.startsWith("hueShift:")) && !k.endsWith(todayKey))
@@ -522,12 +594,34 @@
   });
   document.querySelectorAll(".seg button").forEach(b => {
     b.addEventListener("click", () => {
-      prefs[b.closest(".seg").dataset.pref] = b.dataset.val;
+      const key = b.closest(".seg").dataset.pref;
+      prefs[key] = b.dataset.val;
       savePrefs();
       applyLook();
+      if (key === "pool") load({ fresh: true });
     });
   });
-  if (params.get("ui") === "0") $("ui").classList.add("hidden");
+  /* controls hidden by default: tap anywhere to reveal, auto-hide after 6 s */
+  let hideTimer;
+  function showUI() {
+    if (params.get("ui") === "0") return;
+    $("ui").classList.add("shown");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideUI, 6000);
+  }
+  function hideUI() {
+    $("ui").classList.remove("shown");
+    $("sheet").classList.add("hidden");
+    $("btnSettings").setAttribute("aria-expanded", "false");
+  }
+  document.addEventListener("click", e => {
+    if (e.target.closest(".ui") || e.target.closest(".sheet")) {
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(hideUI, 10000);
+      return;
+    }
+    $("ui").classList.contains("shown") ? hideUI() : showUI();
+  });
 
   applyLook();
   document.fonts?.ready.then(() => fitWord(true));
