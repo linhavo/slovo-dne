@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Slovo dne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Archivo:ital,wght@0,300..900;1,300..900&family=Inter:ital,wght@0,300..700;1,300..700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg1: #1F060E; --bg2: #54101F;
+    --ink: #F8E7E1; --muted: rgba(248,231,225,.62); --accent: #FF8E72;
+    --ghost: rgba(255,255,255,.055);
+    --font-display: "Fraunces", serif;
+    --font-body: "Newsreader", Georgia, serif;
+    --display-weight: 640;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    min-height: 100dvh;
+    background: linear-gradient(168deg, var(--bg1) 0%, var(--bg2) 100%);
+    color: var(--ink);
+    font-family: var(--font-body);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    transition: background .6s ease;
+  }
+  .stage {
+    position: relative;
+    height: 100dvh;
+    max-width: 620px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 0 clamp(24px, 7vw, 48px);
+    padding-bottom: calc(clamp(56px, 12dvh, 120px) + env(safe-area-inset-bottom));
+  }
+  .ghost {
+    position: absolute;
+    right: -0.08em;
+    bottom: 34dvh;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(280px, 62dvh, 560px);
+    line-height: .8;
+    color: var(--ghost);
+    user-select: none;
+    pointer-events: none;
+    z-index: 0;
+    transition: color .6s ease;
+  }
+  .card { position: relative; z-index: 1; }
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: clamp(11px, 2.8vw, 13px);
+    font-weight: 500;
+    letter-spacing: .32em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: clamp(18px, 4dvh, 34px);
+  }
+  .eyebrow .dot { color: var(--accent); padding: 0 .5em; }
+  .word {
+    font-family: var(--font-display);
+    font-weight: var(--display-weight);
+    font-variation-settings: "opsz" 120;
+    font-size: clamp(52px, 15.5vw, 108px);
+    line-height: .98;
+    letter-spacing: -0.015em;
+    overflow-wrap: anywhere;
+    margin-bottom: clamp(12px, 2dvh, 20px);
+  }
+  .gramline {
+    font-style: italic;
+    font-size: clamp(15px, 4vw, 18px);
+    color: var(--muted);
+    padding-bottom: clamp(14px, 2.5dvh, 24px);
+    border-bottom: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+    margin-bottom: clamp(16px, 3dvh, 28px);
+  }
+  .senses { list-style: none; display: grid; gap: clamp(10px, 1.8dvh, 16px); }
+  .sense {
+    display: grid;
+    grid-template-columns: 1.6em 1fr;
+    font-size: clamp(17px, 4.6vw, 21px);
+    line-height: 1.42;
+  }
+  .sense .n { font-family: var(--font-display); font-weight: 600; color: var(--accent); }
+  .sense .label { font-style: italic; color: var(--muted); }
+  .example {
+    grid-column: 2;
+    font-style: italic;
+    font-size: clamp(14px, 3.8vw, 17px);
+    color: var(--muted);
+    margin-top: .3em;
+  }
+  .source {
+    margin-top: clamp(22px, 4dvh, 40px);
+    font-family: var(--font-display);
+    font-size: clamp(10px, 2.6vw, 12px);
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--ink) 40%, transparent);
+  }
+  .ui {
+    position: fixed;
+    right: 16px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    display: flex;
+    gap: 10px;
+    z-index: 5;
+  }
+  .ui button {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink);
+    font-size: 17px;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    transition: background .2s;
+  }
+  .ui button:hover { background: color-mix(in srgb, var(--ink) 18%, transparent); }
+  .ui button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .status {
+    position: fixed; inset: 0;
+    display: grid; place-items: center;
+    font-style: italic;
+    color: var(--muted);
+    font-size: 18px;
+    z-index: 2;
+    text-align: center;
+    padding: 0 32px;
+  }
+  .hidden { display: none !important; }
+
+  /* ---------- settings sheet ---------- */
+  .sheet {
+    position: fixed;
+    left: 50%;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(360px, calc(100vw - 28px));
+    background: color-mix(in srgb, var(--bg1) 82%, var(--ink) 6%);
+    border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+    border-radius: 18px;
+    padding: 18px 18px 16px;
+    backdrop-filter: blur(14px);
+    z-index: 6;
+    display: grid;
+    gap: 14px;
+  }
+  .row-label {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .seg { display: flex; gap: 6px; }
+  .seg button {
+    flex: 1;
+    padding: 8px 4px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .seg button[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--accent) 24%, transparent);
+    border-color: var(--accent);
+  }
+  .seg .f-serif { font-family: "Fraunces", serif; }
+  .seg .f-sans  { font-family: "Archivo", sans-serif; }
+  .seg .f-mono  { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .card { animation: rise .8s cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    .sheet { animation: pop .25s cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes pop { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  }
+  @media (min-width: 900px) {
+    .stage { max-width: 760px; justify-content: center; padding-bottom: 0; }
+    .ghost { bottom: 10dvh; font-size: clamp(400px, 80dvh, 760px); right: -6vw; }
+  }
+</style>
+</head>
+<body>
+  <div class="ghost" id="ghost"></div>
+  <main class="stage">
+    <div class="card hidden" id="card">
+      <p class="eyebrow"><span id="date"></span><span class="dot">&#183;</span>slovo dne</p>
+      <h1 class="word" id="word"></h1>
+      <p class="gramline" id="gram"></p>
+      <ol class="senses" id="senses"></ol>
+      <p class="source">wikislovn&iacute;k &mdash; cs.wiktionary.org</p>
+    </div>
+  </main>
+  <div class="status" id="status">hled&aacute;m slovo&hellip;</div>
+
+  <div class="sheet hidden" id="sheet">
+    <div>
+      <p class="row-label">P&iacute;smo</p>
+      <div class="seg" data-pref="font">
+        <button class="f-serif" data-val="serif">Patkov&eacute;</button>
+        <button class="f-sans" data-val="sans">Bezpatkov&eacute;</button>
+        <button class="f-mono" data-val="mono">Psac&iacute; stroj</button>
+      </div>
+    </div>
+    <div>
+      <p class="row-label">Vzhled</p>
+      <div class="seg" data-pref="mode">
+        <button data-val="auto">Podle slova</button>
+        <button data-val="dark">Tmav&yacute;</button>
+        <button data-val="light">Sv&#283;tl&yacute;</button>
+      </div>
+    </div>
+    <div>
+      <p class="row-label">Pozad&iacute;</p>
+      <div class="seg" data-pref="bg">
+        <button data-val="gradient">P&#345;echod</button>
+        <button data-val="solid">Jedna barva</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ui" id="ui">
+    <button id="btnSettings" title="Nastaven&iacute;" aria-label="Nastaven&iacute;" aria-expanded="false">&#9881;&#65038;</button>
+    <button id="btnTheme" title="Zm&#283;nit barvy" aria-label="Zm&#283;nit barvy">&#9685;</button>
+    <button id="btnNew" title="Nov&eacute; slovo" aria-label="Nov&eacute; slovo">&#8635;</button>
+  </div>
+
+<script>
+(() => {
+  const API = "https://cs.wiktionary.org/w/api.php";
+  const params = new URLSearchParams(location.search);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const $ = id => document.getElementById(id);
+
+  /* ---------- preferences: font / mode / bg ---------- */
+  const DEFAULT_PREFS = { font: "serif", mode: "auto", bg: "gradient" };
+  const prefs = Object.assign({}, DEFAULT_PREFS,
+    JSON.parse(localStorage.getItem("prefs") || "{}"));
+  for (const k of Object.keys(DEFAULT_PREFS)) {
+    if (params.has(k)) prefs[k] = params.get(k);
+  }
+  function savePrefs() { localStorage.setItem("prefs", JSON.stringify(prefs)); }
+
+  const FONTS = {
+    serif: { display: '"Fraunces", serif',        body: '"Newsreader", Georgia, serif', weight: 640 },
+    sans:  { display: '"Archivo", sans-serif',    body: '"Inter", sans-serif',          weight: 800 },
+    mono:  { display: '"IBM Plex Mono", monospace', body: '"IBM Plex Mono", monospace', weight: 600 },
+  };
+
+  /* ---------- palette: derived from the word itself, in OKLCH ----------
+     The word is hashed; the hash picks the base hue, a chroma "temperament"
+     and the accent's hue offset. Lightness values are fixed by the system,
+     which is what guarantees contrast: in OKLCH the L axis is perceptually
+     uniform, so ink at L .96 on a background at L ~.24 always reads well,
+     for any hue and chroma. */
+
+  let currentWord = "slovo";
+  let hueShift = parseInt(localStorage.getItem("hueShift:" + todayKey) || "0", 10);
+
+  function hashWord(w) {
+    // FNV-1a
+    let h = 0x811c9dc5;
+    for (const ch of w.toLowerCase()) {
+      h ^= ch.codePointAt(0);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h;
+  }
+
+  const oklch = (l, c, h) => "oklch(" + l.toFixed(3) + " " + c.toFixed(3) + " " + (((h % 360) + 360) % 360).toFixed(1) + ")";
+
+  function paletteFromWord(word) {
+    const h = hashWord(word);
+    const baseHue = (params.has("hue") ? parseFloat(params.get("hue")) : h % 360) + hueShift;
+    const temperament = ((h >>> 9) % 100) / 100;          // 0 = hushed, 1 = saturated
+    const accentOffset = 130 + ((h >>> 16) % 110);        // 130–240deg away: split-complementary
+    const wantsLight = prefs.mode === "light" || (prefs.mode === "auto" && (h >>> 5) % 4 === 0);
+
+    const bgC = 0.025 + temperament * 0.055;              // background chroma, kept subtle
+    if (!wantsLight) {
+      return {
+        light: false,
+        bg1:    oklch(0.215, bgC,          baseHue),
+        bg2:    oklch(0.335, bgC + 0.025,  baseHue + 18),
+        ink:    oklch(0.960, 0.015,        baseHue),
+        accent: oklch(0.800, 0.115 + temperament * 0.04, baseHue + accentOffset),
+      };
+    }
+    return {
+      light: true,
+      bg1:    oklch(0.955, bgC * 0.8,      baseHue),
+      bg2:    oklch(0.870, bgC,            baseHue + 14),
+      ink:    oklch(0.260, 0.045,          baseHue),
+      accent: oklch(0.470, 0.130 + temperament * 0.035, baseHue + accentOffset),
+    };
+  }
+
+  function applyLook() {
+    const t = paletteFromWord(currentWord);
+    const r = document.documentElement.style;
+    r.setProperty("--bg1", t.bg1);
+    r.setProperty("--bg2", prefs.bg === "solid" ? t.bg1 : t.bg2);
+    r.setProperty("--ink", t.ink);
+    r.setProperty("--accent", t.accent);
+    r.setProperty("--ghost", t.light ? "rgba(0,0,0,.05)" : "rgba(255,255,255,.055)");
+    r.setProperty("--muted", "color-mix(in srgb, " + t.ink + " 62%, transparent)");
+    const f = FONTS[prefs.font] || FONTS.serif;
+    r.setProperty("--font-display", f.display);
+    r.setProperty("--font-body", f.body);
+    r.setProperty("--display-weight", f.weight);
+    // reflect state in the settings sheet
+    document.querySelectorAll(".seg").forEach(seg => {
+      const key = seg.dataset.pref;
+      seg.querySelectorAll("button").forEach(b =>
+        b.setAttribute("aria-pressed", String(b.dataset.val === prefs[key])));
+    });
+    fitWord(true);
+  }
+
+  /* ---------- wikitext parsing ---------- */
+  function cleanWikitext(s) {
+    let prev;
+    do { prev = s;
+      s = s.replace(/\{\{[^{}|]*\|([^{}]*)\}\}/g, (_, inner) => {
+            const parts = inner.split("|").filter(p => !p.includes("="));
+            return parts[0] || "";
+          })
+          .replace(/\{\{[^{}]*\}\}/g, "");
+    } while (s !== prev);
+    return s
+      .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1")
+      .replace(/\[\[([^\]]*)\]\]/g, "$1")
+      .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "")
+      .replace(/<ref[^>]*\/>/g, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/'''?/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  const POS_HEADINGS = ["podstatn\u00e9 jm\u00e9no","p\u0159\u00eddavn\u00e9 jm\u00e9no","sloveso","p\u0159\u00edslovce","citoslovce",
+    "\u010d\u00e1stice","p\u0159edlo\u017eka","spojka","z\u00e1jmeno","\u010d\u00edslovka","idiom","p\u0159\u00edslov\u00ed","fr\u00e1ze","zkratka"];
+
+  function parseEntry(title, wikitext) {
+    const czMatch = wikitext.match(/^==\s*\u010de\u0161tina\s*==\s*$/mi);
+    if (!czMatch) return null;
+    let section = wikitext.slice(czMatch.index + czMatch[0].length);
+    const nextLang = section.match(/^==[^=].*==\s*$/m);
+    if (nextLang) section = section.slice(0, nextLang.index);
+
+    let pos = null;
+    for (const p of POS_HEADINGS) {
+      if (new RegExp("^===+\\s*" + p + "\\s*(?:\\(.*\\))?\\s*===+", "mi").test(section)) { pos = p; break; }
+    }
+    let gender = null;
+    const g = section.match(/\{\{\s*Rod\s*\|\s*(m|f|\u017e|s|str)/i);
+    if (g) gender = { m:"rod mu\u017esk\u00fd", f:"rod \u017eensk\u00fd", "\u017e":"rod \u017eensk\u00fd", s:"rod st\u0159edn\u00ed", str:"rod st\u0159edn\u00ed" }[g[1].toLowerCase()];
+
+    const vyz = section.match(/^===+\s*v\u00fdznam\s*===+\s*$/mi);
+    if (!vyz) return null;
+    let block = section.slice(vyz.index + vyz[0].length);
+    const nextHead = block.match(/^===+/m);
+    if (nextHead) block = block.slice(0, nextHead.index);
+
+    const senses = [];
+    let hasFlavor = false;
+    for (const line of block.split("\n")) {
+      if (/^#[^*:#]/.test(line)) {
+        const labels = [...line.matchAll(/\{\{\s*P\u0159\u00edznak\w*\s*\|([^{}]*)\}\}/gi)]
+          .flatMap(m => m[1].split("|"))
+          .filter(x => x && !x.includes("=") && x !== "cs");
+        if (labels.length) hasFlavor = true;
+        const text = cleanWikitext(line.replace(/^#\s*/, ""));
+        if (!text) continue;
+        if (/^tvar (slova|podstatn\u00e9ho|p\u0159\u00eddavn\u00e9ho|slovesa|z\u00e1jmena)/i.test(text)) return null;
+        senses.push({ text, label: labels.join(", ") });
+      } else if (/^#\*/.test(line) && senses.length && !senses[senses.length - 1].example) {
+        const ex = cleanWikitext(line.replace(/^#\*\s*/, ""));
+        if (ex) senses[senses.length - 1].example = ex;
+      }
+      if (senses.length >= 3) break;
+    }
+    if (!senses.length) return null;
+    return { title, pos, gender, senses, hasFlavor };
+  }
+
+  /* ---------- fetching ---------- */
+  async function api(q) {
+    const res = await fetch(API + "?origin=*&format=json&formatversion=2&" + q);
+    if (!res.ok) throw new Error("API " + res.status);
+    return res.json();
+  }
+
+  const okTitle = t => /^[a-z\u00e1\u010d\u010f\u00e9\u011b\u00ed\u0148\u00f3\u0159\u0161\u0165\u00fa\u016f\u00fd\u017e]{3,}$/i.test(t);
+
+  async function fetchWord(title) {
+    const d = await api("action=query&prop=revisions&rvprop=content&rvslots=main&titles=" + encodeURIComponent(title));
+    const page = d.query?.pages?.[0];
+    const wt = page?.revisions?.[0]?.slots?.main?.content;
+    return wt ? parseEntry(page.title, wt) : null;
+  }
+
+  async function fetchRandomWord() {
+    for (let round = 0; round < 4; round++) {
+      const r = await api("action=query&list=random&rnnamespace=0&rnlimit=30");
+      const titles = r.query.random.map(x => x.title).filter(okTitle).slice(0, 25);
+      if (!titles.length) continue;
+      const d = await api("action=query&prop=revisions&rvprop=content&rvslots=main&titles=" +
+        encodeURIComponent(titles.join("|")));
+      const entries = (d.query?.pages ?? [])
+        .map(p => p.revisions?.[0]?.slots?.main?.content ? parseEntry(p.title, p.revisions[0].slots.main.content) : null)
+        .filter(Boolean);
+      if (!entries.length) continue;
+      const flavored = entries.filter(e => e.hasFlavor);
+      const pool = flavored.length ? flavored : entries;
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    throw new Error("nenalezeno");
+  }
+
+  /* ---------- rendering ---------- */
+  function render(entry) {
+    currentWord = entry.title;
+    applyLook();
+    $("date").textContent = new Date().toLocaleDateString("cs-CZ", { day: "numeric", month: "long" });
+    $("word").textContent = entry.title;
+    $("ghost").textContent = entry.title[0];
+    const gram = [entry.pos, entry.gender].filter(Boolean).join(", ");
+    $("gram").textContent = gram || "";
+    $("gram").classList.toggle("hidden", !gram);
+    const ol = $("senses");
+    ol.innerHTML = "";
+    entry.senses.forEach((s, i) => {
+      const li = document.createElement("li");
+      li.className = "sense";
+      const n = document.createElement("span"); n.className = "n"; n.textContent = (i + 1) + ".";
+      const body = document.createElement("span");
+      if (s.label) {
+        const lab = document.createElement("span");
+        lab.className = "label"; lab.textContent = s.label + " ";
+        body.appendChild(lab);
+      }
+      body.appendChild(document.createTextNode(s.text));
+      li.append(n, body);
+      if (s.example) {
+        const ex = document.createElement("span");
+        ex.className = "example"; ex.textContent = "\u201e" + s.example + "\u201c";
+        li.appendChild(ex);
+      }
+      ol.appendChild(li);
+    });
+    $("status").classList.add("hidden");
+    $("card").classList.remove("hidden");
+    fitWord(true);
+  }
+
+  function fitWord(reset) {
+    const el = $("word");
+    if (reset) el.style.fontSize = "";
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth && size > 30) {
+      size -= 2;
+      el.style.fontSize = size + "px";
+    }
+  }
+
+  /* ---------- daily logic ---------- */
+  const CACHE = "slovoDne:" + todayKey;
+
+  async function load({ fresh = false } = {}) {
+    $("card").classList.add("hidden");
+    $("status").textContent = "hled\u00e1m slovo\u2026";
+    $("status").classList.remove("hidden");
+    try {
+      let entry = null;
+      if (params.get("w")) {
+        entry = await fetchWord(params.get("w"));
+        if (!entry) { $("status").textContent = "\u201e" + params.get("w") + "\u201c jsem ve Wikislovn\u00edku nena\u0161el."; return; }
+      } else if (!fresh && localStorage.getItem(CACHE)) {
+        entry = JSON.parse(localStorage.getItem(CACHE));
+      } else {
+        entry = await fetchRandomWord();
+        localStorage.setItem(CACHE, JSON.stringify(entry));
+        Object.keys(localStorage).forEach(k => {
+          if ((k.startsWith("slovoDne:") || k.startsWith("hueShift:")) && !k.endsWith(todayKey))
+            localStorage.removeItem(k);
+        });
+      }
+      render(entry);
+    } catch (e) {
+      $("status").textContent = "Slovo se nepoda\u0159ilo na\u010d\u00edst \u2014 zkontrolujte p\u0159ipojen\u00ed a zkuste \u21bb.";
+      console.error(e);
+    }
+  }
+
+  /* ---------- UI wiring ---------- */
+  $("btnNew").addEventListener("click", () => load({ fresh: true }));
+  $("btnTheme").addEventListener("click", () => {
+    hueShift = (hueShift + 137) % 360; // golden angle: each press lands far from the last
+    localStorage.setItem("hueShift:" + todayKey, hueShift);
+    applyLook();
+  });
+  $("btnSettings").addEventListener("click", () => {
+    const open = $("sheet").classList.toggle("hidden");
+    $("btnSettings").setAttribute("aria-expanded", String(!open));
+  });
+  document.querySelectorAll(".seg button").forEach(b => {
+    b.addEventListener("click", () => {
+      prefs[b.closest(".seg").dataset.pref] = b.dataset.val;
+      savePrefs();
+      applyLook();
+    });
+  });
+  if (params.get("ui") === "0") $("ui").classList.add("hidden");
+
+  applyLook();
+  document.fonts?.ready.then(() => fitWord(true));
+  load();
+})();
+</script>
+</body>
+</html>
