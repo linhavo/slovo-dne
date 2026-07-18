@@ -28,7 +28,7 @@ jobs:
         run: node scripts/snap.mjs
         env:
           # sem patří vaše preferované parametry vzhledu
-          PAGE_URL: "https://linhavo.github.io/slovo-dne/?ui=0"
+          PAGE_URL: "https://linhavo.github.io/slovo-dne/?ui=0&bg=solid&pool=cizi"
 
       - name: Commit & push
         run: |
