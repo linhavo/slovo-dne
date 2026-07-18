@@ -2,9 +2,12 @@ import { chromium } from "playwright";
 
 const baseUrl = process.env.PAGE_URL || "https://linhavo.github.io/slovo-dne/?ui=0";
 
+// iPhone 1179×2556, Mac 2880×1800 — světlá i tmavá varianta, vždy stejné slovo
 const shots = [
-  { file: "wallpaper.png",     width: 393,  height: 852, scale: 3 }, // iPhone (1179×2556)
-  { file: "wallpaper-mac.png", width: 1440, height: 900, scale: 2 }, // Mac (2880×1800)
+  { file: "wallpaper-light.png",     width: 393,  height: 852, scale: 3, mode: "light" },
+  { file: "wallpaper-dark.png",      width: 393,  height: 852, scale: 3, mode: "dark"  },
+  { file: "wallpaper-mac-light.png", width: 1440, height: 900, scale: 2, mode: "light" },
+  { file: "wallpaper-mac-dark.png",  width: 1440, height: 900, scale: 2, mode: "dark"  },
 ];
 
 const browser = await chromium.launch();
@@ -16,13 +19,13 @@ for (const s of shots) {
     deviceScaleFactor: s.scale,
   });
 
-  // druhý snímek dostane stejné slovo jako první (localStorage se mezi stránkami nesdílí)
-  const url = word ? baseUrl + "&w=" + encodeURIComponent(word) : baseUrl;
+  let url = baseUrl + "&mode=" + s.mode;
+  if (word) url += "&w=" + encodeURIComponent(word);
 
   await page.goto(url, { waitUntil: "networkidle" });
   await page.waitForSelector("#card:not(.hidden)", { timeout: 45000 });
   await page.evaluate(() => document.fonts.ready);
-  await page.waitForTimeout(600); // doběhnutí animace
+  await page.waitForTimeout(600);
 
   if (!word) word = (await page.textContent("#word")).trim();
 
