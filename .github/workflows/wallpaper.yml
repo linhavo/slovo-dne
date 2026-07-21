@@ -2,7 +2,7 @@ name: Denní tapeta
 
 on:
   schedule:
-    - cron: "30 2 * * *"   # 03:30 UTC = 4:30/5:30 ráno v Praze
+    - cron: "30 23 * * *"   # 03:30 UTC = 4:30/5:30 ráno v Praze
   workflow_dispatch: {}     # tlačítko pro ruční spuštění
 
 permissions:
