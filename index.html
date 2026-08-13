@@ -428,26 +428,33 @@
   const LOCAL_HISTORY_KEY = "wordHistory";
   const LOCAL_HISTORY_MAX = 60;
 
+  function readLocalHistory() {
+    // a corrupt value here must never take down the whole draw
+    try {
+      const h = JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || "[]");
+      return Array.isArray(h) ? h : [];
+    } catch { return []; }
+  }
+
   function excludedWords() {
     const set = new Set();
     (params.get("exclude") || "").split(",").forEach(w => {
       w = w.trim().toLowerCase();
       if (w) set.add(w);
     });
-    JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || "[]")
-      .forEach(w => set.add(String(w).toLowerCase()));
+    readLocalHistory().forEach(w => set.add(String(w).toLowerCase()));
     return set;
   }
 
   function rememberWord(word) {
-    const hist = JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || "[]");
+    const hist = readLocalHistory();
     hist.push(word);
     while (hist.length > LOCAL_HISTORY_MAX) hist.shift();
     localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(hist));
   }
 
-  // filters out excluded items, but never returns an empty list (falls back to the
-  // unfiltered list) so a large exclusion set can't stall the draw entirely
+  // for filtering a complete pool: falls back to the unfiltered list only when the
+  // exclusion set covers the entire pool, so the draw can't stall outright
   function withoutExcluded(items, excluded, keyFn) {
     if (!excluded.size) return items;
     const filtered = items.filter(it => !excluded.has(keyFn(it).toLowerCase()));
@@ -462,6 +469,10 @@
   }
 
   async function fetchRandomWord(excluded) {
+    // each round samples a fresh random batch, so exclusion is strict per round —
+    // a round whose batch is all recently-seen words is skipped, and only when
+    // every round comes up empty do we fall back to a repeat rather than stall
+    let fallback = null;
     for (let round = 0; round < 4; round++) {
       const r = await api("action=query&list=random&rnnamespace=0&rnlimit=30");
       const titles = r.query.random.map(x => x.title).filter(okTitle).slice(0, 25);
@@ -473,9 +484,16 @@
         .filter(Boolean);
       if (!entries.length) continue;
       const flavored = entries.filter(e => e.hasFlavor);
-      const pool = withoutExcluded(flavored.length ? flavored : entries, excluded, e => e.title);
-      return pool[Math.floor(Math.random() * pool.length)];
+      if (!fallback) {
+        const any = flavored.length ? flavored : entries;
+        fallback = any[Math.floor(Math.random() * any.length)];
+      }
+      const isFresh = e => !excluded.has(e.title.toLowerCase());
+      const freshFlavored = flavored.filter(isFresh);
+      const pool = freshFlavored.length ? freshFlavored : entries.filter(isFresh);
+      if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
     }
+    if (fallback) return fallback;
     throw new Error("nenalezeno");
   }
 
