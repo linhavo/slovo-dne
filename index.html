@@ -420,6 +420,40 @@
 
   const okTitle = t => /^[a-z\u00e1\u010d\u010f\u00e9\u011b\u00ed\u0148\u00f3\u0159\u0161\u0165\u00fa\u016f\u00fd\u017e]{3,}$/i.test(t);
 
+  /* ---------- no-repeat guard: words shown recently are excluded from the draw ----------
+     Two sources feed the exclusion set: an `exclude` URL param (used by scripts/snap.mjs,
+     which runs in a throw-away CI browser with no localStorage of its own, so it passes in
+     history it read from the repo's word-history.json) and a small local rolling history
+     for people opening the page directly in a browser. */
+  const LOCAL_HISTORY_KEY = "wordHistory";
+  const LOCAL_HISTORY_MAX = 60;
+
+  function excludedWords() {
+    const set = new Set();
+    (params.get("exclude") || "").split(",").forEach(w => {
+      w = w.trim().toLowerCase();
+      if (w) set.add(w);
+    });
+    JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || "[]")
+      .forEach(w => set.add(String(w).toLowerCase()));
+    return set;
+  }
+
+  function rememberWord(word) {
+    const hist = JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || "[]");
+    hist.push(word);
+    while (hist.length > LOCAL_HISTORY_MAX) hist.shift();
+    localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(hist));
+  }
+
+  // filters out excluded items, but never returns an empty list (falls back to the
+  // unfiltered list) so a large exclusion set can't stall the draw entirely
+  function withoutExcluded(items, excluded, keyFn) {
+    if (!excluded.size) return items;
+    const filtered = items.filter(it => !excluded.has(keyFn(it).toLowerCase()));
+    return filtered.length ? filtered : items;
+  }
+
   async function fetchWord(title) {
     const d = await api("action=query&prop=revisions&rvprop=content&rvslots=main&titles=" + encodeURIComponent(title));
     const page = d.query?.pages?.[0];
@@ -427,7 +461,7 @@
     return wt ? parseEntry(page.title, wt) : null;
   }
 
-  async function fetchRandomWord() {
+  async function fetchRandomWord(excluded) {
     for (let round = 0; round < 4; round++) {
       const r = await api("action=query&list=random&rnnamespace=0&rnlimit=30");
       const titles = r.query.random.map(x => x.title).filter(okTitle).slice(0, 25);
@@ -439,7 +473,7 @@
         .filter(Boolean);
       if (!entries.length) continue;
       const flavored = entries.filter(e => e.hasFlavor);
-      const pool = flavored.length ? flavored : entries;
+      const pool = withoutExcluded(flavored.length ? flavored : entries, excluded, e => e.title);
       return pool[Math.floor(Math.random() * pool.length)];
     }
     throw new Error("nenalezeno");
@@ -471,9 +505,10 @@
     return pool;
   }
 
-  async function fetchLoanWord() {
-    const pool = await getLoanPool();
-    if (!pool || pool.length < 30) return fetchRandomWord(); // graceful fallback
+  async function fetchLoanWord(excluded) {
+    const rawPool = await getLoanPool();
+    if (!rawPool || rawPool.length < 30) return fetchRandomWord(excluded); // graceful fallback
+    const pool = withoutExcluded(rawPool, excluded, p => p.w);
     for (let round = 0; round < 4; round++) {
       const batch = [];
       const used = new Set();
@@ -495,7 +530,7 @@
         .filter(Boolean);
       if (entries.length) return entries[Math.floor(Math.random() * entries.length)];
     }
-    return fetchRandomWord();
+    return fetchRandomWord(excluded);
   }
 
   /* ---------- rendering ---------- */
@@ -567,7 +602,9 @@
       } else if (!fresh && localStorage.getItem(CACHE)) {
         entry = JSON.parse(localStorage.getItem(CACHE));
       } else {
-        entry = prefs.pool === "vse" ? await fetchRandomWord() : await fetchLoanWord();
+        const excluded = excludedWords();
+        entry = prefs.pool === "vse" ? await fetchRandomWord(excluded) : await fetchLoanWord(excluded);
+        rememberWord(entry.title);
         localStorage.setItem(CACHE, JSON.stringify(entry));
         Object.keys(localStorage).forEach(k => {
           if ((k.startsWith("slovoDne:") || k.startsWith("hueShift:")) && !k.endsWith(todayKey))
