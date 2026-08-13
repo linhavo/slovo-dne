@@ -17,6 +17,9 @@ const history = existsSync(HISTORY_PATH) ? JSON.parse(readFileSync(HISTORY_PATH,
 const excludeParam = history.slice(-HISTORY_WINDOW).join(",");
 
 const baseUrl = process.env.PAGE_URL || "https://linhavo.github.io/slovo-dne/?ui=0";
+// a word pinned via w= in PAGE_URL bypassed the draw entirely — it doesn't belong
+// in the history (and isn't sanitized, so a comma in it would corrupt the exclude list)
+const wordWasForced = /[?&]w=/.test(baseUrl);
 
 // iPhone 1179×2556, Mac 2880×1800 — světlá i tmavá varianta, vždy stejné slovo
 const shots = [
@@ -53,7 +56,7 @@ for (const s of shots) {
 
 await browser.close();
 
-if (word && history[history.length - 1] !== word) {
+if (word && !wordWasForced && history[history.length - 1] !== word) {
   history.push(word);
   while (history.length > HISTORY_KEEP) history.shift();
   writeFileSync(HISTORY_PATH, JSON.stringify(history, null, 2) + "\n");
