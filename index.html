@@ -346,19 +346,25 @@
 
   /* ---------- wikitext parsing ---------- */
   function cleanWikitext(s) {
-    let prev;
+    // strip citation apparatus first, so a {{Citace ...}} template's own
+    // pipe-heavy, all-named params never reach the template-collapse loop
+    s = s.replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "")
+         .replace(/<ref[^>]*\/>/g, "");
+    let prev, guard = 0;
     do { prev = s;
       s = s.replace(/\{\{[^{}|]*\|([^{}]*)\}\}/g, (_, inner) => {
             const parts = inner.split("|").filter(p => !p.includes("="));
             return parts[0] || "";
           })
           .replace(/\{\{[^{}]*\}\}/g, "");
-    } while (s !== prev);
+    } while (s !== prev && ++guard < 25);
+    // safety net: real wiki markup is sometimes malformed (unclosed templates,
+    // stray braces from bot-imported citations) and the loop above can only
+    // resolve balanced {{...}} pairs — never let raw template syntax reach the screen
+    s = s.replace(/\{\{[\s\S]*$/, "").replace(/\{\{[\s\S]*?\}\}/g, "");
     return s
       .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1")
       .replace(/\[\[([^\]]*)\]\]/g, "$1")
-      .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "")
-      .replace(/<ref[^>]*\/>/g, "")
       .replace(/<[^>]+>/g, "")
       .replace(/'''?/g, "")
       .replace(/\s+/g, " ")
