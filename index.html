@@ -346,19 +346,28 @@
 
   /* ---------- wikitext parsing ---------- */
   function cleanWikitext(s) {
-    let prev;
+    // strip citation apparatus first, so a {{Citace ...}} template's own
+    // pipe-heavy, all-named params never reach the template-collapse loop
+    s = s.replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "")
+         .replace(/<ref[^>]*\/>/g, "");
+    let prev, guard = 0;
     do { prev = s;
       s = s.replace(/\{\{[^{}|]*\|([^{}]*)\}\}/g, (_, inner) => {
             const parts = inner.split("|").filter(p => !p.includes("="));
-            return parts[0] || "";
+            // the last positional arg is the displayable content in the
+            // templates that appear here, e.g. {{Příklad|cs|the sentence}} —
+            // leading positional args tend to be qualifiers like a language code
+            return parts[parts.length - 1] || "";
           })
           .replace(/\{\{[^{}]*\}\}/g, "");
-    } while (s !== prev);
+    } while (s !== prev && ++guard < 25);
+    // safety net: real wiki markup is sometimes malformed (unclosed templates,
+    // stray braces from bot-imported citations) and the loop above can only
+    // resolve balanced {{...}} pairs — never let raw template syntax reach the screen
+    s = s.replace(/\{\{[\s\S]*$/, "").replace(/\{\{[\s\S]*?\}\}/g, "");
     return s
       .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1")
       .replace(/\[\[([^\]]*)\]\]/g, "$1")
-      .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "")
-      .replace(/<ref[^>]*\/>/g, "")
       .replace(/<[^>]+>/g, "")
       .replace(/'''?/g, "")
       .replace(/\s+/g, " ")
@@ -388,6 +397,11 @@
     let block = section.slice(vyz.index + vyz[0].length);
     const nextHead = block.match(/^===+/m);
     if (nextHead) block = block.slice(0, nextHead.index);
+    // strip citation refs on the whole block *before* splitting into lines: a
+    // <ref>{{Citace ...}}</ref> sometimes contains a stray embedded newline
+    // (real cs.wiktionary data does this), which would otherwise cut the ref
+    // in half across two lines and leave a dangling, unclosed template behind
+    block = block.replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "").replace(/<ref[^>]*\/>/g, "");
 
     const senses = [];
     let hasFlavor = false;
