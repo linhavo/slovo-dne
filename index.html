@@ -296,9 +296,30 @@
 
   const oklch = (l, c, h) => "oklch(" + l.toFixed(3) + " " + c.toFixed(3) + " " + (((h % 360) + 360) % 360).toFixed(1) + ")";
 
+  // the raw hash is uniform over the hue circle, but the red/magenta arc
+  // around 0deg reads as "pink" to the eye over a much wider span than any
+  // other hue reads as its own color name — so a uniform draw still comes
+  // up pink far more often than it comes up, say, teal. To fix that we
+  // can't change what a hue *looks* like, only which raw hashes land on
+  // it: only a narrow slice of raw hues is allowed to fall in that
+  // pink-reading arc (stretched out to still cover the full arc), while
+  // the rest of the circle is compressed to share the remaining hashes —
+  // so pink still happens, just roughly half as often as an even draw
+  // would give it.
+  function dePinkify(hue) {
+    let x = ((hue + 180) % 360) - 180;  // signed degrees, arc centered on 0
+    const bandIn = 24, bandOut = 45;    // ±24deg raw stretched to ±45deg pink arc
+    const sign = x < 0 ? -1 : 1;
+    const ax = Math.abs(x);
+    const y = ax <= bandIn
+      ? ax * (bandOut / bandIn)
+      : bandOut + (ax - bandIn) * ((180 - bandOut) / (180 - bandIn));
+    return (sign * y + 360) % 360;
+  }
+
   function paletteFromWord(word) {
     const h = hashWord(word);
-    const baseHue = (params.has("hue") ? parseFloat(params.get("hue")) : h % 360) + hueShift;
+    const baseHue = (params.has("hue") ? parseFloat(params.get("hue")) : dePinkify(h % 360)) + hueShift;
     const temperament = ((h >>> 9) % 100) / 100;          // 0 = hushed, 1 = saturated
     const accentOffset = 130 + ((h >>> 16) % 110);        // 130–240deg away: split-complementary
     const wantsLight = prefs.mode === "light" || (prefs.mode === "auto" && (h >>> 5) % 4 === 0);
