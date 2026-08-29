@@ -56,5 +56,23 @@ jobs:
           git config user.name "tapeta-bot"
           git config user.email "actions@users.noreply.github.com"
           git add wallpaper-light.png wallpaper-dark.png wallpaper-mac-light.png wallpaper-mac-dark.png word-history.json
-          git commit -m "tapeta $(date -u +%F)" || echo "beze změny"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "beze změny"
+            exit 0
+          fi
+
+          TODAY=$(date -u +%F)
+
+          # If the previous commit was itself just a wallpaper publish, replace
+          # it in place instead of stacking a new one — these images are fully
+          # reconstructable from word-history.json, so there's no point letting
+          # history grow by ~1MB every night. A real code change on top of
+          # history still gets a normal commit.
+          if [[ "$(git log -1 --format=%s)" == tapeta\ * ]]; then
+            git commit --amend -m "tapeta $TODAY"
+            git push --force-with-lease origin HEAD:main
+          else
+            git commit -m "tapeta $TODAY"
+            git push origin HEAD:main
+          fi
