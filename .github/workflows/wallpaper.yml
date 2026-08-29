@@ -31,7 +31,13 @@ jobs:
       - name: Check if today's wallpaper is already published
         id: check
         run: |
-          TODAY=$(date -u +%F)
+          # Keyed on the Prague date, NOT UTC. The 23:30 UTC run happens at
+          # 00:30/01:30 Prague, i.e. it generates the *next* Prague day's
+          # wallpaper — which is also the date the image itself renders. Keying
+          # on the UTC date made that run collide with the backup run that had
+          # already published earlier the same UTC day, so the night slot was
+          # always skipped and every wallpaper landed at 07:30 Prague instead.
+          TODAY=$(TZ=Europe/Prague date +%F)
           if git log -20 --format=%s | grep -qx "tapeta $TODAY"; then
             echo "Already published for $TODAY, skipping."
             echo "already=true" >> "$GITHUB_OUTPUT"
@@ -70,7 +76,9 @@ jobs:
             exit 0
           fi
 
-          TODAY=$(date -u +%F)
+          # Same Prague date as the check step above, so the commit message
+          # matches both the idempotency key and the date shown in the image.
+          TODAY=$(TZ=Europe/Prague date +%F)
           BASE=$(git rev-parse HEAD)
 
           # If the previous commit was itself just a wallpaper publish, replace
