@@ -19,6 +19,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The publish step below amends the previous wallpaper commit and
+          # force-pushes it. actions/checkout defaults to fetch-depth: 1, and
+          # amending the tip of a shallow clone produces a commit rooted at the
+          # shallow boundary — force-pushing that REPLACES main with a
+          # single-commit history and throws away all the source history.
+          # Full history is required for the amend to keep a real parent.
+          fetch-depth: 0
 
       - name: Check if today's wallpaper is already published
         id: check
@@ -63,6 +71,7 @@ jobs:
           fi
 
           TODAY=$(date -u +%F)
+          BASE=$(git rev-parse HEAD)
 
           # If the previous commit was itself just a wallpaper publish, replace
           # it in place instead of stacking a new one — these images are fully
@@ -70,8 +79,17 @@ jobs:
           # history grow by ~1MB every night. A real code change on top of
           # history still gets a normal commit.
           if [[ "$(git log -1 --format=%s)" == tapeta\ * ]]; then
+            # Amending on a shallow clone would rewrite main down to a single
+            # commit (see fetch-depth above) — bail out rather than destroy it.
+            if [ -f .git/shallow ]; then
+              echo "::error::Refusing to amend/force-push from a shallow clone (needs fetch-depth: 0)."
+              exit 1
+            fi
             git commit --amend -m "tapeta $TODAY"
-            git push --force-with-lease origin HEAD:main
+            # Pin the lease to the exact commit we amended, so a push that
+            # landed while this job ran makes this fail loudly instead of
+            # clobbering it.
+            git push --force-with-lease=main:"$BASE" origin HEAD:main
           else
             git commit -m "tapeta $TODAY"
             git push origin HEAD:main
